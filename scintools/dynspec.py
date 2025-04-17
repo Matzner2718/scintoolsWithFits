@@ -27,6 +27,7 @@ from scipy.interpolate import griddata, interp1d, RectBivariateSpline
 from scipy.signal import convolve2d, medfilt, savgol_filter
 from scipy.io import loadmat
 from lmfit import Parameters, fit_report
+from astropy.io import fits
 try:
     from skimage.restoration import inpaint
     biharmonic = True
@@ -69,10 +70,12 @@ class Dynspec:
         """
 
         if filename:
+            print("file")
             self.load_file(filename, verbose=verbose, process=process,
                            lamsteps=lamsteps, subint_thresh=subint_thresh,
                            remove_short_subs=remove_short_subs, mjd=mjd)
         elif dyn:
+            print("dyn")
             self.load_dyn_obj(dyn, verbose=verbose, process=process,
                               lamsteps=lamsteps)
         else:
@@ -4353,6 +4356,52 @@ class HoloDyn():
         self.dt = dt
         self.freq = np.mean(np.unique(self.freqs))
         self.mjd = mjd
+        return
+
+class FitsDyn():
+    def __init__(self, fitsfilename, dyn=None, header=None, times=[],
+                 freqs=[], nchan=None, nsub=None, bw=None, df=None,
+                 freq=None, tobs=None, dt=None, mjd=60000):
+        
+        """
+        Loads a simple fits dynamic spectrum file
+        """
+        fits_file = fits.open(fitsfilename)
+        hdr = fits_file[0].header
+        data_in = fits_file[0].data.T
+        
+        centre_freq= hdr['CRVAL1']
+        nchans=hdr['NCHANS']
+        TTOT = hdr['TTOT']
+        nsub=int((TTOT)/hdr['CDELT2'])
+        channel_width=hdr['CDELT1']
+        subint_length=hdr['CDELT2']
+        freq_high = centre_freq+((nchans/2)*channel_width)
+        freq_low = centre_freq-((nchans/2)*channel_width)
+        obs_start=0
+        obs_end=(TTOT)
+        MJD=hdr['MJD']
+        BW=hdr['BW']
+         
+        freqs=np.linspace(freq_low, freq_high, num=nchans)
+        times=np.linspace(obs_start, obs_end, num=nsub)
+       
+        
+
+        self.name = fitsfilename
+        self.header = hdr
+        self.times = times  # times should be the start times of each bin
+        self.freqs = freqs
+        self.nchan = nchans if nchans is not None else len(freqs)
+        self.nsub = nsub if nsub is not None else len(times)
+        self.bw = BW if BW is not None else np.ptp(freqs)
+        self.df = abs(channel_width) if channel_width is not None else abs(np.mean(np.abs(np.diff(freqs))))
+        self.freq = float(centre_freq) if centre_freq is not None else float(np.mean(np.unique(freqs)))
+        self.dt = subint_length if subint_length is not None else np.mean(np.abs(np.diff(times)))
+        self.tobs = obs_end if obs_end is not None else np.ptp(times) + subint_length
+        self.mjd = MJD
+        self.dyn = data_in
+                
         return
 
 
